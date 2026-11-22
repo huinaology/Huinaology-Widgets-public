@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huinaology Pomodoro Widget</title>
+    <style>
+        :root {
+            /* 🍅 토마토 레드 / 버터 노랑 버튼 / 연한 초록 꼭지 */
+            --tomato: #C8454C; --tomato-band: #A8333B; --leaf: #7CC27F; --leaf-dark: #4FA361;
+            --btn-bg: #FDEBAE; --btn-bg-hover: #F2A0A4; --btn-text: #A63A42; --btn-text-hover: #7E1F27;
+            --text-main: #6A5656; --text-sub: #AA9A9A; --border-color: #F7EBC9; --card-bg: #FFFFFF; --main-bg: #FFFFFF; --secondary-accent: #FCEFC4; --accent-color: #F7DD8F;
+            --success-bg: #E3F6F3; --success-text: #2D8B7E; --fail-bg: #FBE8E8; --fail-text: #C55353; --warn-bg: #FFF3E0; --warn-text: #E65100;
+            --pomo-timer-text: #C8454C;
+        }
+        [data-theme="dark"] {
+            --tomato: #7A2F35; --tomato-band: #5E2228; --leaf: #6FA577; --leaf-dark: #578C60;
+            --btn-bg: #EBD99B; --btn-bg-hover: #D98A8E; --btn-text: #5C3F1E; --btn-text-hover: #3A1417;
+            --text-main: #F2E4E2; --text-sub: #B6A0A0; --border-color: #5B4540; --card-bg: #382A2E; --main-bg: #2A2125; --secondary-accent: #6D5A2F; --accent-color: #BFA55C;
+            --success-bg: #1A332E; --success-text: #5ED4B9; --fail-bg: #3A1E1E; --fail-text: #F28B8B; --warn-bg: #3A2E1A; --warn-text: #FFB74D;
+            --pomo-timer-text: #FF9DA2;
+        }
+        /* ☕ 휴식 모드: 같은 구조에서 빨간 부분만 보라로 교체 */
+        [data-pomo="break"] { --tomato: #8E7DC0; --tomato-band: #6E5DA3; --btn-bg-hover: #C9BDF0; --btn-text: #5E5391; --btn-text-hover: #4A4070; --pomo-timer-text: #7F70B8; }
+        [data-theme="dark"][data-pomo="break"] { --tomato: #5A4F85; --tomato-band: #41385F; --btn-bg-hover: #8F82C2; --btn-text: #4A3F6E; --btn-text-hover: #20183F; --pomo-timer-text: #C7BEE8; }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; }
+        body { margin: 0; padding: 0; background: transparent; overflow: hidden; color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        h3 { font-size: 12px; margin: 0 0 12px 0; color: var(--text-sub); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .ico { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 0; }
+        .ico > * { display: block; }
+        input[type="checkbox"] { accent-color: var(--tomato); }
+
+        /* 🍅 토마토를 가운데 선에서 반으로 잘라 위젯 위·아래에 붙인 모양 (단색·그림자 없음).
+           위 뚜껑 = 꼭지 + 눈금, 아래 뚜껑 = 화살표(▲). 가운데 흰 창은 사각형이고 안쪽만 스크롤된다. */
+        .tomato { height: 100%; display: flex; flex-direction: column; }
+        .tomato-cap { position: relative; flex: none; background: var(--tomato); transition: background 0.4s ease; }
+        .tomato-top { height: 54px; border-bottom: 4px solid var(--tomato-band); border-radius: 46% 46% 0 0 / 100% 100% 0 0; }
+        .tomato-bottom { height: 26px; border-top: 4px solid var(--tomato-band); border-radius: 0 0 46% 46% / 0 0 100% 100%; }
+        .tomato-ticks { position: absolute; left: 50%; bottom: 3px; width: 150px; height: 19px; transform: translateX(-50%); pointer-events: none; }
+        .tomato-calyx { position: absolute; top: 3px; left: 50%; width: 58px; height: 26px; transform: translateX(-50%); pointer-events: none; }
+        .tomato-arrow { position: absolute; top: 5px; left: 50%; width: 22px; height: 12px; transform: translateX(-50%); pointer-events: none; }
+        .tomato-mid { flex: 1 1 auto; min-height: 0; display: flex; padding: 0 10px; background: var(--tomato); transition: background 0.4s ease; }
+        .tomato-window { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 14px 16px 16px; background: var(--main-bg); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--accent-color) transparent; }
+        .tomato-window::-webkit-scrollbar { width: 6px; }
+        .tomato-window::-webkit-scrollbar-thumb { background: var(--accent-color); border-radius: 6px; }
+        .pomo-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--border-color); }
+        .pomo-head h2 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: -0.5px; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
+
+        #pomoStartBtn, #pomoPauseBtn, #pomoResetBtn { width: auto !important; flex: 1 1 0; min-width: 0; max-width: 88px; padding-left: 6px; padding-right: 6px; }
+        @media (max-width: 440px) {
+            .tomato-top { height: 50px; }
+            .tomato-mid { padding: 0 7px; }
+            .tomato-window { padding: 12px 12px 14px; }
+        }
+        .btn { width: 100%; padding: 10px 12px; border: none; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; letter-spacing: -0.3px; word-break: keep-all; white-space: normal; height: auto; line-height: 1.4; }
+        .btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+        .btn-primary { background-color: var(--btn-bg); color: var(--btn-text); }
+        .btn-primary:hover { background-color: var(--btn-bg-hover); color: var(--btn-text-hover); }
+        .btn-secondary { background-color: var(--card-bg); border: 2px solid var(--secondary-accent); color: var(--text-main); }
+        .btn-secondary:hover { background-color: var(--main-bg); border-color: var(--btn-bg-hover); color: var(--btn-text); }
+        .btn-secondary:disabled, .btn-primary:disabled { opacity: 0.5; cursor: default; }
+        .shimeji-size-btn.active { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-text); }
+
+        /* 🐹 타이머 창 안을 돌아다니는 캐릭터 */
+        #shimejiStage > div { will-change: left, transform; }
+        .shimeji-walk { animation: shimejiBobWalk 0.55s ease-in-out infinite; }
+        .shimeji-hurry { animation: shimejiBobHurry 0.15s ease-in-out infinite; }
+        .shimeji-rest, .shimeji-sleep { animation: shimejiBreathe 2.2s ease-in-out infinite; }
+        .shimeji-wake { animation: none; }
+        @keyframes shimejiBobWalk { 0%, 100% { margin-bottom: 0; } 50% { margin-bottom: 2px; } }
+        @keyframes shimejiBobHurry { 0%, 100% { margin-bottom: 0; } 50% { margin-bottom: 7px; } }
+        @keyframes shimejiBreathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.92); } }
+    </style>
+    <!-- 아이콘: Lucian Icons (MIT) - icons/LICENSE-lucian-icons.txt 참고 -->
+    <script type="module">
+        ['bed', 'book', 'briefcase', 'check', 'clock', 'close', 'coffee', 'dumbbell', 'flame', 'graduation', 'pause', 'paw', 'play', 'plus', 'refresh', 'settings', 'stopwatch', 'tag', 'undo', 'verified']
+            .forEach(name => import(`./icons/${name}.js`).catch(err => console.warn('lucian icon load failed:', name, err)));
+    </script>
+</head>
+
+<body>
+    <div class="tomato">
+        <div class="tomato-cap tomato-top">
+            <svg class="tomato-ticks" viewBox="0 0 150 19" aria-hidden="true">
+                <g fill="#fff" opacity="0.92">
+                    <rect x="13" y="11" width="4" height="8" rx="2"/><rect x="33" y="7" width="4" height="12" rx="2"/><rect x="53" y="11" width="4" height="8" rx="2"/><rect x="73" y="3" width="4" height="16" rx="2"/><rect x="93" y="11" width="4" height="8" rx="2"/><rect x="113" y="7" width="4" height="12" rx="2"/><rect x="133" y="11" width="4" height="8" rx="2"/>
+                </g>
+            </svg>
+            <svg class="tomato-calyx" viewBox="0 0 64 28" aria-hidden="true">
+                <path d="M32 27 C20 27 6 22 4 12 C3 5 8 2 13 3 C24 5 32 12 32 27Z" fill="var(--leaf)"/>
+                <path d="M32 27 C44 27 58 22 60 12 C61 5 56 2 51 3 C40 5 32 12 32 27Z" fill="var(--leaf-dark)"/>
+            </svg>
+        </div>
+        <div class="tomato-mid">
+            <div class="tomato-window">
+                <div id="tab-pomodoro">
+                    <div class="pomo-head">
+                        <h2><i data-li="stopwatch" data-size="20"></i> Pomodoro Timer</h2>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <button class="btn-secondary btn-ico" style="padding:4px 8px; font-size:11px; width:auto; margin:0; border-radius:6px; cursor:pointer; font-weight:700;" onclick="forcePomoMode(true)" title="집중 시간으로 수동 전환"><i data-li="flame" data-size="14"></i> 집중</button>
+                            <button class="btn-secondary btn-ico" style="padding:4px 8px; font-size:11px; width:auto; margin:0; border-radius:6px; cursor:pointer; font-weight:700;" onclick="forcePomoMode(false)" title="휴식 시간으로 수동 전환"><i data-li="coffee" data-size="14"></i> 휴식</button>
+                            <button class="btn-secondary btn-ico" style="padding:4px 8px; font-size:11px; width:auto; margin:0; border-radius:6px; cursor:pointer;" onclick="openShimejiSettings()" title="캐릭터 설정" aria-label="캐릭터 설정"><i data-li="settings" data-size="14"></i></button>
+                            <button class="btn-secondary btn-ico" id="darkModeBtn" style="padding:4px 8px; font-size:11px; width:auto; margin:0; border-radius:6px; cursor:pointer;" onclick="toggleDarkMode()" title="라이트/다크 모드 전환" aria-label="라이트/다크 모드 전환">🌙</button>
+                        </div>
+                    </div>
+
+                    <!-- 타이머 카드의 아래 점선이 곧 캐릭터가 걷는 '바닥'이다. 캐릭터는 글자/버튼 뒤(배경 레이어)를 지나다닌다. -->
+                    <div style="margin-bottom: 0; text-align: center; padding: 0 12px 26px 12px; position: relative; overflow: hidden; border-radius: 12px; border-bottom: 1px dashed var(--border-color);">
+                        <div id="shimejiStage" style="position:absolute; inset:0; z-index:0; pointer-events:none;"></div>
+
+                        <div style="position:relative; z-index:1;">
+                            <div id="pomoTimerDisplay" style="font-size: 48px; font-weight: 900; color: var(--pomo-timer-text); font-variant-numeric: tabular-nums; margin: 4px 0;">25:00</div>
+
+                            <div style="display:flex; gap:8px; justify-content:center; margin-bottom:12px;">
+                                <button class="btn btn-primary btn-ico" style="width:80px; margin:0;" onclick="masterStartTimer()" id="pomoStartBtn"><i data-li="play" data-size="14"></i> Start</button>
+                                <button class="btn btn-secondary btn-ico" style="width:80px; margin:0;" onclick="masterPauseTimer()" id="pomoPauseBtn"><i data-li="pause" data-size="14"></i> Pause</button>
+                                <button class="btn btn-secondary btn-ico" style="width:80px; margin:0;" onclick="masterResetTimer()" id="pomoResetBtn"><i data-li="undo" data-size="14"></i> Reset</button>
+                            </div>
+
+                            <div style="font-size:11px; color:var(--text-sub); display:flex; gap:12px; justify-content:center; align-items:center;">
+                                <label>집중: <input type="number" id="pomoFocusInput" value="25" onchange="updatePomoSettings()" style="width:40px; padding:2px; border:1px solid var(--border-color); border-radius:4px; text-align:center; background:transparent; color:inherit;">분</label>
+                                <label>휴식: <input type="number" id="pomoBreakInput" value="5" onchange="updatePomoSettings()" style="width:40px; padding:2px; border:1px solid var(--border-color); border-radius:4px; text-align:center; background:transparent; color:inherit;">분</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔌 Notion 미연동 시(개인 ID 미입력) 이 안내만 보이고, 아래 작업 목록 영역은 통째로 숨겨진다 -->
+                    <div id="pomo-local-note" style="display:none; margin: 12px 4px 4px 4px; padding: 10px 12px; border-radius: 10px; background: var(--tomato); border: 1px dashed var(--tomato-band); font-size: 11px; color: #fff; line-height: 1.5; text-align:center;">
+                        <span id="pomo-local-note-text"></span>
+                    </div>
+
+                    <div id="pomo-sync-area">
+                        <div id="pomo-new-task-card" style="margin-bottom: 16px; padding: 16px 4px 0 4px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                                <h3 style="margin:0; font-size:14px; font-weight:600; color:var(--text-main); white-space:nowrap;">새 작업 추가 (New Task)</h3>
+                                <!-- Action 체크박스. 값(공부/업무/…)은 Notion Action DB의 같은 이름 페이지와 연결된다. Action 속성을 쓸 수 있을 때만 보인다. -->
+                                <div id="pomo-action-options" style="display:none; flex-wrap:wrap; gap:8px; font-size:11px;">
+                                    <label style="display:flex; align-items:center; gap:3px; cursor:pointer; color:var(--text-sub);"><input type="checkbox" class="pomo-action-check" value="공부" style="width:13px; height:13px;"> 공부</label>
+                                    <label style="display:flex; align-items:center; gap:3px; cursor:pointer; color:var(--text-sub);"><input type="checkbox" class="pomo-action-check" value="업무" style="width:13px; height:13px;"> 업무</label>
+                                    <label style="display:flex; align-items:center; gap:3px; cursor:pointer; color:var(--text-sub);"><input type="checkbox" class="pomo-action-check" value="독서" style="width:13px; height:13px;"> 독서</label>
+                                    <label style="display:flex; align-items:center; gap:3px; cursor:pointer; color:var(--text-sub);"><input type="checkbox" class="pomo-action-check" value="운동" style="width:13px; height:13px;"> 운동</label>
+                                    <label style="display:flex; align-items:center; gap:3px; cursor:pointer; color:var(--text-sub);"><input type="checkbox" class="pomo-action-check" value="수면" style="width:13px; height:13px;"> 수면</label>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="pomoTitle" placeholder="새 작업 이름 입력 후 추가..." style="flex:1; min-width:0; padding:10px; border:1px solid var(--border-color); border-radius:10px; font-size:13px; background:var(--card-bg); color:var(--text-main);" onkeypress="if(event.key==='Enter') createNewPomodoroTask()">
+                                <button class="btn btn-primary btn-ico" id="pomoNewStartBtn" style="width: 60px; margin-bottom: 0;" onclick="createNewPomodoroTask(true)" title="추가 후 바로 시작" aria-label="추가 후 바로 시작"><i data-li="play" data-size="22"></i></button>
+                                <button class="btn btn-secondary btn-ico" id="pomoNewBtn" style="width: 60px; margin-bottom: 0;" onclick="createNewPomodoroTask()" title="추가" aria-label="추가"><i data-li="plus" data-size="22"></i></button>
+                            </div>
+                        </div>
+
+                        <div id="pomo-list-card" style="margin-bottom: 0; padding: 0 4px;">
+                            <h3 style="display: flex; justify-content: space-between; align-items: center; margin-bottom:8px;">
+                                <span>전체 작업 목록 (Tasks - 복수 연동 및 개별 재생 지원)</span>
+                                <button class="btn-secondary btn-ico" style="padding:4px 8px; font-size:10px; width:auto; margin:0; border-radius:6px;" onclick="loadPomodoroTasks()" title="새로고침" aria-label="새로고침"><i data-li="refresh" data-size="16"></i></button>
+                            </h3>
+                            <div id="pomo-all-list" style="font-size: 13px;">
+                                <div style="color:var(--text-sub); padding:10px 0; display:flex; align-items:center; justify-content:center; gap:4px;"><i data-li="clock" data-size="14"></i> 로딩 중...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tomato-cap tomato-bottom"><svg class="tomato-arrow" viewBox="0 0 22 12" aria-hidden="true"><polyline points="3,10 11,3 19,10" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </div>
+
+    <!-- 🐹 캐릭터 설정 모달 -->
+    <div id="shimeji-settings-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:2000; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:var(--card-bg); border-radius:16px; padding:18px; width:100%; max-width:460px; max-height:85vh; overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <h2 style="font-size:15px; margin:0; color:var(--text-main); display:flex; align-items:center; gap:6px;"><i data-li="paw" data-size="20"></i> 캐릭터 설정</h2>
+                <button onclick="closeShimejiSettings()" style="border:none; background:transparent; font-size:18px; cursor:pointer; color:var(--text-sub); padding:2px 6px;">✕</button>
+            </div>
+            <div style="font-size:11px; color:var(--text-sub); margin-bottom:10px; line-height:1.6;">
+                이미지를 올리면 캐릭터가 <b>타이머 창 안을 돌아다녀요.</b> (Start: 걷기 · 1분 남으면 서두르기 · 휴식 모드: 수면 · Pause: 휴식)<br>
+                이미지를 올리지 않은 칸은 <b>기본 캐릭터(양)</b>가 대신 보이고(흐리게 표시된 칸), 왼쪽을 보는 이미지를 기준으로 움직여요. 캐릭터는 최대 <b id="shimejiMaxLabel">3</b>개까지 등록할 수 있어요.
+            </div>
+            <div style="font-size:11px; color:var(--warn-text); background:var(--warn-bg); border-radius:8px; padding:8px 10px; margin-bottom:14px; line-height:1.6;">
+                ⚠️ 캐릭터는 <b>이 브라우저에만 저장</b>돼요. 다른 기기·다른 브라우저와는 연동되지 않으니 기기마다 따로 등록해주세요.<br>
+                ⚠️ 사이트 데이터를 삭제하거나, 오래 접속하지 않거나, 저장 공간이 부족하면 <b>캐릭터가 갑자기 사라질 수 있어요.</b> 원본 이미지는 따로 보관해주세요.
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <div style="font-size:11px; font-weight:700; color:var(--text-main); margin-bottom:6px;">캐릭터 크기</div>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn-secondary shimeji-size-btn" data-size="S" style="flex:1; margin:0; padding:8px; font-size:11px;" onclick="setShimejiSize('S')">S (40px)</button>
+                    <button class="btn-secondary shimeji-size-btn" data-size="M" style="flex:1; margin:0; padding:8px; font-size:11px;" onclick="setShimejiSize('M')">M (84px)</button>
+                    <button class="btn-secondary shimeji-size-btn" data-size="L" style="flex:1; margin:0; padding:8px; font-size:11px;" onclick="setShimejiSize('L')">L (128px)</button>
+                </div>
+            </div>
+
+            <div id="shimeji-char-list" style="display:flex; flex-direction:column; gap:12px;"></div>
+            <button class="btn btn-secondary" id="shimejiAddCharBtn" style="margin-top:12px; margin-bottom:0;" onclick="addShimejiCharacter()">+ 캐릭터 추가</button>
+        </div>
+    </div>
+
+    <script>
+        // ✨ 노션에서 쿼리 파라미터(?key=)를 해시(#key=)로 변환하거나 잘라먹는 경우를 대비해 두 가지 방식 모두 지원
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+        const secretKey = urlParams.get('key') || hashParams.get('key') || '';
+        // 노션 템플릿에 넣는 샘플용 주소(?demo=1): 서버 호출 없이 샘플 안내만 보여준다.
+        const isDemo = (urlParams.get('demo') || hashParams.get('demo')) === '1';
+        // Notion 연동 없이 타이머만 쓰는 주소(?timer=1): 서버 호출도, 안내 문구도 없이 깨끗하게 보여준다.
+        const isPlainTimer = (urlParams.get('timer') || hashParams.get('timer')) === '1';
+
+        let notionConnected = false; // Notion 연동 여부. mode=list 응답으로 판별한다.
+
+        // 아이콘(Lucian Icons, MIT): HTML의 <i data-li="이름" data-size="숫자"></i> 자리표시를 실제 아이콘으로 바꾼다.
+        function liIcon(name, size = 16) {
+            if (!name) return '';
+            return `<span class="ico"><lucian-${name} size="${size}"></lucian-${name}></span>`;
+        }
+        function hydrateLiIcons(root) {
+            (root || document).querySelectorAll('i[data-li]').forEach(el => {
+                const holder = document.createElement('span');
+                holder.innerHTML = liIcon(el.dataset.li, parseInt(el.dataset.size, 10) || 16);
+                if (holder.firstElementChild) el.replaceWith(holder.firstElementChild);
+            });
+        }
+        hydrateLiIcons();
+
+        window.onload = function () {
+            if (localStorage.getItem('darkMode') === 'true') { document.documentElement.setAttribute('data-theme', 'dark'); const btn = document.getElementById('darkModeBtn'); if (btn) btn.innerText = '☀️'; }
+            applyPomoModeTheme();
+            initShimeji();
+            updatePomoDisplay();
+            loadPomodoroTasks();
+        };
+
+        function toggleDarkMode() {
+            const root = document.documentElement;
+            const isDark = root.getAttribute('data-theme') === 'dark';
+            const btn = document.getElementById('darkModeBtn');
+            if (isDark) { root.removeAttribute('data-theme'); if (btn) btn.innerText = '🌙'; localStorage.setItem('darkMode', 'false'); }
+            else { root.setAttribute('data-theme', 'dark'); if (btn) btn.innerText = '☀️'; localStorage.setItem('darkMode', 'true'); }
+        }
+
+        // ==========================================
+        // 🍅 Pomodoro 다중 연동 타이머 로직
+        // ==========================================
+        let pomoInterval = null;
+        let pomoTimeLeft = 25 * 60;
+        let isFocusMode = true;
+        let isPomoRunning = false;
+        let audioCtx = null;
+
+        let linkedTaskIds = new Set();
+        window.pomoTaskStates = {};
+
+        function playBeep() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+                osc.stop(audioCtx.currentTime + 0.5);
+            } catch (e) { console.log('Audio not supported or blocked'); }
+        }
+
+        function updatePomoDisplay() {
+            const m = Math.floor(pomoTimeLeft / 60);
+            const s = pomoTimeLeft % 60;
+            document.getElementById('pomoTimerDisplay').innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            updateShimejiState();
+        }
+
+        function updatePomoSettings() {
+            if (isPomoRunning) return;
+            masterResetTimer();
+        }
+
+        // 집중/휴식에 따라 위젯 전체 색상을 바꾼다. (탭이 하나뿐이라 항상 즉시 적용)
+        // 색은 위쪽 CSS가 정한다. 집중이면 토마토(빨강), 휴식이면 보라.
+        function applyPomoModeTheme() { document.documentElement.setAttribute('data-pomo', isFocusMode ? 'focus' : 'break'); }
+
+        function forcePomoMode(focus) {
+            isFocusMode = focus;
+            const focusMins = parseInt(document.getElementById('pomoFocusInput').value) || 25;
+            const breakMins = parseInt(document.getElementById('pomoBreakInput').value) || 5;
+            pomoTimeLeft = (isFocusMode ? focusMins : breakMins) * 60;
+            applyPomoModeTheme();
+            if (isPomoRunning) {
+                masterPauseTimer();
+            } else {
+                shimejiPausedByUser = false; // 실행 중이 아닐 때의 수동 전환은 미리보기이므로 일시정지 취급하지 않음
+                updatePomoDisplay();
+            }
+        }
+
+        // 연동된 작업 하나를 타이머에 맞춰 재생한다. 일시정지면 이어서, 미진행이면 새로 시작, 이미 진행 중이면 그대로 둔다.
+        function startOrResumeLinkedTask(pageId) {
+            const state = window.pomoTaskStates[pageId];
+            let action = 'start_existing';
+            if (state === 'paused') action = 'resume';
+            else if (state === 'running') return Promise.resolve();
+
+            return fetch(`/api/pomodoro?mode=${action}&pageId=${pageId}&key=${encodeURIComponent(secretKey)}`).then(res => res.json());
+        }
+
+        async function toggleTaskLink(checkbox, pageId) {
+            if (checkbox.checked) {
+                linkedTaskIds.add(pageId);
+                // 타이머가 이미 돌고 있는 중에 연동하면 Start를 다시 누를 수 없으므로(이미 실행 중), 연동 즉시 이 작업도 따라서 재생한다.
+                if (isPomoRunning && notionConnected) {
+                    try { await startOrResumeLinkedTask(pageId); } catch (e) { console.log('Link sync error:', e); }
+                }
+            } else {
+                linkedTaskIds.delete(pageId);
+            }
+            loadPomodoroTasks();
+        }
+
+        async function masterStartTimer() {
+            if (isPomoRunning) return;
+
+            const btn = document.getElementById('pomoStartBtn');
+            btn.innerText = '...';
+            btn.disabled = true;
+
+            try {
+                if (notionConnected && linkedTaskIds.size > 0) {
+                    await Promise.all(Array.from(linkedTaskIds).map(startOrResumeLinkedTask));
+                }
+
+                isPomoRunning = true;
+                shimejiPausedByUser = false;
+                updateShimejiState();
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+                pomoInterval = setInterval(() => {
+                    pomoTimeLeft--;
+                    if (pomoTimeLeft <= 0) {
+                        playBeep();
+                        clearInterval(pomoInterval);
+                        isPomoRunning = false;
+
+                        if (isFocusMode && notionConnected && linkedTaskIds.size > 0) {
+                            linkedTaskIds.forEach(pageId => { triggerActionSilently('finish', pageId); });
+                            linkedTaskIds.clear();
+                        }
+
+                        isFocusMode = !isFocusMode;
+                        const focusMins = parseInt(document.getElementById('pomoFocusInput').value) || 25;
+                        const breakMins = parseInt(document.getElementById('pomoBreakInput').value) || 5;
+                        pomoTimeLeft = (isFocusMode ? focusMins : breakMins) * 60;
+                        applyPomoModeTheme();
+
+                        updatePomoDisplay();
+                        if (!isFocusMode) { setTimeout(() => masterStartTimer(), 1000); }
+                    }
+                    updatePomoDisplay();
+                }, 1000);
+
+                if (notionConnected) loadPomodoroTasks();
+            } catch (e) {
+                console.error(e);
+                alert('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+            }
+            btn.innerHTML = liIcon('play', 14) + ' Start';
+            btn.disabled = false;
+        }
+
+        async function masterPauseTimer() {
+            if (!isPomoRunning) return;
+            isPomoRunning = false;
+            clearInterval(pomoInterval);
+            shimejiPausedByUser = true;
+            updateShimejiState();
+
+            if (notionConnected && linkedTaskIds.size > 0) {
+                try {
+                    const encodedKey = encodeURIComponent(secretKey);
+                    const promises = Array.from(linkedTaskIds).map(pageId =>
+                        fetch(`/api/pomodoro?mode=hold&pageId=${pageId}&key=${encodedKey}`)
+                    );
+                    await Promise.all(promises);
+                    loadPomodoroTasks();
+                } catch (e) { console.log('Pause sync error:', e); }
+            }
+        }
+
+        function masterResetTimer() {
+            masterPauseTimer();
+            isFocusMode = true;
+            shimejiPausedByUser = false; // 리셋은 '일시정지'가 아니라 새 시작이므로 기본 걷기 상태로
+            const focusMins = parseInt(document.getElementById('pomoFocusInput').value) || 25;
+            pomoTimeLeft = focusMins * 60;
+            applyPomoModeTheme();
+            updatePomoDisplay();
+        }
+
+        async function triggerActionSilently(mode, pageId) {
+            try {
+                const encodedKey = encodeURIComponent(secretKey);
+                await fetch(`/api/pomodoro?mode=${mode}&pageId=${pageId}&key=${encodedKey}`);
+                loadPomodoroTasks();
+            } catch (e) { console.log('Silent action error:', e); }
+        }
+
+        // ==========================================
+        // 🔗 Notion 작업 목록 연동 (연동 안 되어 있으면 이 영역 전체를 숨긴다)
+        // ==========================================
+        function formatPomoTime(isoString) { if (!isoString || !isoString.includes('T')) return '미정'; return new Date(isoString).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }); }
+
+        let pomoTimerInterval = null;
+        function updatePomoTimers() {
+            const nowMs = Date.now();
+            document.querySelectorAll('.pomo-timer').forEach(el => {
+                const startIso = el.getAttribute('data-start');
+                const isPaused = el.getAttribute('data-paused') === 'true';
+                const pausedAtIso = el.getAttribute('data-paused-at');
+                const pauseTimeSec = parseInt(el.getAttribute('data-pause-time'), 10) || 0;
+
+                if (!startIso) return;
+
+                let startMs = el.dataset.localStart;
+                if (!startMs) {
+                    startMs = new Date(startIso).getTime();
+                    if (startMs > nowMs) startMs = nowMs;
+                    el.dataset.localStart = startMs;
+                } else {
+                    startMs = parseInt(startMs, 10);
+                }
+
+                let endMs = nowMs;
+                if (isPaused && pausedAtIso) {
+                    endMs = new Date(pausedAtIso).getTime();
+                    if (endMs > nowMs) endMs = nowMs;
+                }
+
+                let diffSec = Math.floor((endMs - startMs) / 1000) - pauseTimeSec;
+                if (diffSec < 0) diffSec = 0;
+
+                const h = Math.floor(diffSec / 3600);
+                const m = Math.floor((diffSec % 3600) / 60);
+                const s = diffSec % 60;
+                let text = '';
+                if (h > 0) text += `${h}h `;
+                if (h > 0 || m > 0) text += `${m}m `;
+                text += `${s}s`;
+                el.innerText = text;
+            });
+        }
+
+        // ==========================================
+        // 🏷️ Action (Notion Pomodoro DB의 Action 관계형 속성) - 선택 기능
+        // ==========================================
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // Pomodoro DB에 Action 속성이 있고 Action DB도 읽을 수 있을 때만 체크박스를 보여준다. (체크해 둔 상태는 그대로 유지)
+        function setActionOptionsVisible(enabled) {
+            const box = document.getElementById('pomo-action-options');
+            if (box) box.style.display = enabled ? 'flex' : 'none';
+        }
+
+        const POMO_ACTION_ICONS = { '공부': 'graduation', '업무': 'briefcase', '독서': 'book', '운동': 'dumbbell', '수면': 'bed' };
+        function renderActionBadges(actions) {
+            if (!actions || actions.length === 0) return '';
+            return actions.map(a => `<span style="font-size:11px; color:var(--text-sub); font-weight:400; margin-left:6px; white-space:nowrap;">${liIcon(POMO_ACTION_ICONS[a] || 'tag', 13)} ${escapeHtml(a)}</span>`).join('');
+        }
+
+        function setSyncAreaVisible(visible) {
+            document.getElementById('pomo-sync-area').style.display = visible ? '' : 'none';
+            document.getElementById('pomo-local-note').style.display = visible ? 'none' : 'block';
+        }
+
+        // 연동을 쓸 수 없을 때 기본 타이머 모드로 전환하고, 이유에 맞는 안내를 보여준다.
+        function showLocalMode(kind, detail) {
+            notionConnected = false;
+            const messages = {
+                demo: '👀 샘플 화면입니다. 타이머는 그대로 사용해볼 수 있어요.<br>작업 추가·목록 같은 Notion 연동 기능은 <b>내 위젯 주소로 교체</b>하면 사용할 수 있습니다.',
+                nokey: '🔑 주소 끝에 <b>?key=설정한비밀번호</b>를 붙여주세요. (Vercel의 <b>WIDGET_SECRET</b> 값)<br>지금은 기본 타이머로만 동작 중입니다.<br>💡 Notion 연동 없이 타이머만 쓰실 거라면 주소 끝에 <b>?timer=1</b>을 붙이면 이 안내가 사라집니다.',
+                badkey: '🔑 인증 키가 맞지 않습니다.<br>주소의 <b>?key=</b> 값이 Vercel의 <b>WIDGET_SECRET</b> 값과 같은지 확인해주세요.',
+                notconfigured: '🔌 Notion 연동이 설정되지 않아 기본 타이머로만 동작 중입니다.<br>내 Notion Pomodoro DB와 연동하려면 위젯 배포 시 <b>NOTION_TOKEN</b> / <b>POMODORO_DB_ID</b>를 입력해주세요.<br>💡 연동 없이 타이머만 쓰실 거라면 주소 끝에 <b>?timer=1</b>을 붙이면 이 안내가 사라집니다.',
+                error: '⚠️ Notion 연결 중 오류가 발생해 기본 타이머로만 동작 중입니다.<br><b>Pomodoro DB · Daily DB · Action DB에 통합(Connections) 연결이 빠지지 않았는지</b> 먼저 확인해주세요.<br>그 외에 토큰·DB ID, 템플릿 속성 구성도 확인이 필요합니다.' + (detail ? '<br><span style="opacity:0.85;">' + escapeHtml(detail) + '</span>' : ''),
+                network: '⚠️ 서버에 연결할 수 없어 기본 타이머로만 동작 중입니다.'
+            };
+            document.getElementById('pomo-local-note-text').innerHTML = messages[kind] || messages.network;
+            setSyncAreaVisible(false);
+            if (kind === 'plain') document.getElementById('pomo-local-note').style.display = 'none';
+        }
+
+        async function loadPomodoroTasks() {
+            if (isPlainTimer) { showLocalMode('plain'); return; }
+            if (isDemo) { showLocalMode('demo'); return; }
+            if (!secretKey) { showLocalMode('nokey'); return; }
+
+            const listEl = document.getElementById('pomo-all-list');
+            listEl.innerHTML = `<div style="color:var(--text-sub); padding:10px 0; display:flex; align-items:center; justify-content:center; gap:4px;">${liIcon('clock', 14)} 로딩 중...</div>`;
+
+            try {
+                const res = await fetch(`/api/pomodoro?mode=list&key=${encodeURIComponent(secretKey)}&t=${Date.now()}`);
+                if (res.status === 401) { showLocalMode('badkey'); return; }
+                const data = await res.json();
+
+                if (!data.success) {
+                    showLocalMode(data.notConfigured ? 'notconfigured' : 'error', data.error);
+                    return;
+                }
+
+                notionConnected = true;
+                setSyncAreaVisible(true);
+                setActionOptionsVisible(data.actionEnabled === true);
+
+                let allTasks = [];
+                window.pomoTaskStates = {};
+
+                if (data.todoTasks) data.todoTasks.forEach(t => allTasks.push({ ...t, type: 'todo' }));
+                if (data.activeTasks) data.activeTasks.forEach(t => allTasks.push({ ...t, type: 'active' }));
+                if (data.finishedTasks) data.finishedTasks.forEach(t => allTasks.push({ ...t, type: 'finished' }));
+
+                allTasks.sort((a, b) => {
+                    const order = { 'todo': 1, 'active': 2, 'finished': 3 };
+                    if (order[a.type] !== order[b.type]) return order[a.type] - order[b.type];
+                    if (!a.start) return -1; if (!b.start) return 1;
+                    return new Date(a.start) - new Date(b.start);
+                });
+
+                if (allTasks.length === 0) {
+                    listEl.innerHTML = '<div style="color:var(--text-sub); text-align:center; padding:10px 0;">오늘의 작업이 없습니다.</div>';
+                } else {
+                    listEl.innerHTML = allTasks.map(t => {
+                        const isLinked = linkedTaskIds.has(t.id);
+                        const cardBg = isLinked ? 'var(--success-bg)' : 'white';
+                        const cardBorder = isLinked ? '2px solid var(--success-text)' : '1px solid var(--border-color)';
+                        const linkCheckedAttr = isLinked ? 'checked' : '';
+
+                        if (t.type === 'todo') window.pomoTaskStates[t.id] = 'todo';
+                        else if (t.type === 'active') window.pomoTaskStates[t.id] = (t.pausedAt !== null) ? 'paused' : 'running';
+                        else window.pomoTaskStates[t.id] = 'finished';
+
+                        if (t.type === 'todo') {
+                            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:${cardBg}; border:${cardBorder}; border-radius:8px; margin-bottom:8px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <div style="display:flex; flex-direction:column; gap:2px;">
+                                        <span><span style="font-weight:600; color:var(--text-main);">${t.title}</span>${renderActionBadges(t.action)}</span>
+                                        <span style="font-size:11px; color:var(--text-sub);">미진행 (오늘일정)</span>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                    <label style="cursor:pointer; display:flex; align-items:center; background:rgba(45,139,126,0.1); padding:4px; border-radius:4px;" title="타이머와 연동하기">
+                                        <input type="checkbox" ${linkCheckedAttr} onchange="toggleTaskLink(this, '${t.id}')" style="width:14px; height:14px; cursor:pointer; margin:0;">
+                                    </label>
+                                    <button class="btn btn-primary btn-ico" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" onclick="runIndividualAction('start_existing', '${t.id}')" title="개별 재생" aria-label="개별 재생">${liIcon('play', 16)}</button>
+                                </div>
+                            </div>`;
+                        } else if (t.type === 'active') {
+                            const isPaused = t.pausedAt !== null;
+                            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:${cardBg}; border:${cardBorder}; border-radius:8px; margin-bottom:8px;">
+                                <div style="display:flex; align-items:center; gap:8px; opacity: ${isPaused && !isLinked ? '0.6' : '1'};">
+                                    <div style="display:flex; flex-direction:column; gap:2px;">
+                                        <span><span style="font-weight:600; color:var(--text-main);">${t.title}</span>${renderActionBadges(t.action)}</span>
+                                        <span style="font-size:11px; color:var(--text-sub);">시작: ${formatPomoTime(t.start)} <span style="margin:0 4px;">|</span> <span style="color:${isPaused ? 'var(--text-sub)' : '#E53E3E'}; font-weight:600;" class="pomo-timer" data-start="${t.start}" data-paused="${isPaused}" data-paused-at="${t.pausedAt || ''}" data-pause-time="${t.pauseTime}">0s</span></span>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                    <label style="cursor:pointer; display:flex; align-items:center; background:rgba(45,139,126,0.1); padding:4px; border-radius:4px;" title="타이머와 연동하기">
+                                        <input type="checkbox" ${linkCheckedAttr} onchange="toggleTaskLink(this, '${t.id}')" style="width:14px; height:14px; cursor:pointer; margin:0;">
+                                    </label>
+                                    ${isPaused ? `<button class="btn btn-secondary btn-ico" style="width:auto; margin:0; padding:6px 8px; font-size:11px; border-color:var(--accent-color);" onclick="runIndividualAction('resume', '${t.id}')" title="개별 재생" aria-label="개별 재생">${liIcon('play', 16)}</button>` : `<button class="btn btn-secondary btn-ico" style="width:auto; margin:0; padding:6px 8px; font-size:11px;" onclick="runIndividualAction('hold', '${t.id}')" title="일시정지" aria-label="일시정지">${liIcon('pause', 16)}</button>`}
+                                    <button class="btn btn-primary btn-ico" style="width:auto; margin:0; padding:6px 8px; font-size:11px;" onclick="runIndividualAction('finish', '${t.id}')" title="작업 완료(종료)" aria-label="작업 완료(종료)">${liIcon('check', 16)}</button>
+                                </div>
+                            </div>`;
+                        } else {
+                            const start = new Date(t.start).getTime(); const end = new Date(t.end).getTime(); let diffSec = Math.floor((end - start) / 1000) - (t.pauseTime || 0); if (diffSec < 0) diffSec = 0;
+                            const h = Math.floor(diffSec / 3600); const m = Math.floor((diffSec % 3600) / 60); const s = diffSec % 60; let text = ''; if (h > 0) text += `${h}h `; if (h > 0 || m > 0) text += `${m}m `; text += `${s}s`;
+                            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--secondary-accent); border:1px solid var(--accent-color); border-radius:8px; margin-bottom:8px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="display:inline-flex; margin-top:2px;">${liIcon('verified', 18)}</span>
+                                    <div style="display:flex; flex-direction:column; gap:2px;">
+                                        <span><span style="font-weight:600; color:var(--text-main);">${t.title}</span>${renderActionBadges(t.action)}</span>
+                                        <span style="font-size:11px; color:var(--text-sub);">${formatPomoTime(t.start)} ~ ${formatPomoTime(t.end)} <span style="margin:0 4px;">|</span> <span style="font-weight:600;">${text}</span></span>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }
+                    }).join('');
+                }
+                if (pomoTimerInterval) clearInterval(pomoTimerInterval); updatePomoTimers(); pomoTimerInterval = setInterval(updatePomoTimers, 1000);
+            } catch (e) {
+                showLocalMode('network');
+            }
+        }
+
+        async function runIndividualAction(mode, pageId) {
+            try {
+                const encodedKey = encodeURIComponent(secretKey);
+                const res = await fetch(`/api/pomodoro?mode=${mode}&pageId=${pageId}&key=${encodedKey}`);
+                const data = await res.json();
+                if (data.success) {
+                    if (linkedTaskIds.has(pageId) && mode === 'finish') {
+                        linkedTaskIds.delete(pageId);
+                    }
+                    loadPomodoroTasks();
+                } else {
+                    alert('요청 실패: ' + data.error);
+                }
+            } catch (e) { alert('네트워크 오류 발생'); }
+        }
+
+        // startNow=true("추가 후 바로 시작"): 만든 작업을 타이머와 연동하고 바로 시작한다.
+        async function createNewPomodoroTask(startNow = false) {
+            const input = document.getElementById('pomoTitle');
+            const title = input.value.trim();
+            if (!title) return alert('새 작업 이름을 입력해주세요.');
+
+            const actionChecks = document.querySelectorAll('.pomo-action-check');
+            const checkedActions = Array.from(actionChecks).filter(el => el.checked).map(el => el.value);
+
+            input.disabled = true;
+            const addBtn = document.getElementById('pomoNewBtn');
+            const addStartBtn = document.getElementById('pomoNewStartBtn');
+            const btn = startNow ? addStartBtn : addBtn; // 눌린 버튼에만 '...' 표시
+            addBtn.disabled = true;
+            addStartBtn.disabled = true;
+            btn.innerText = '...';
+
+            try {
+                const encodedKey = encodeURIComponent(secretKey);
+                let url = `/api/pomodoro?mode=start&title=${encodeURIComponent(title)}&key=${encodedKey}`;
+                // 항목마다 action=이름 으로 따로 보낸다 (이름에 쉼표가 있어도 안전)
+                checkedActions.forEach(name => { url += `&action=${encodeURIComponent(name)}`; });
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.success) {
+                    input.value = '';
+                    actionChecks.forEach(el => el.checked = false);
+                    loadPomodoroTasks();
+                    if (startNow && data.pageId) await linkAndStartNewTask(data.pageId);
+                } else {
+                    alert('생성 실패: ' + (data.error || '알 수 없는 에러'));
+                }
+            } catch (e) {
+                alert('네트워크 오류 발생');
+            }
+            input.disabled = false;
+            addBtn.disabled = false;
+            addStartBtn.disabled = false;
+            addBtn.innerHTML = liIcon('plus', 22);
+            addStartBtn.innerHTML = liIcon('play', 22);
+            input.focus();
+        }
+
+        // 새로 만든 작업을 타이머와 연동하고 바로 시작한다.
+        async function linkAndStartNewTask(pageId) {
+            linkedTaskIds.add(pageId);
+            if (isPomoRunning) {
+                // 타이머가 이미 돌고 있으면 타이머는 그대로 두고 새 작업만 지금 시작
+                try {
+                    const encodedKey = encodeURIComponent(secretKey);
+                    await fetch(`/api/pomodoro?mode=start_existing&pageId=${pageId}&key=${encodedKey}`);
+                } catch (e) { console.log('Start new task error:', e); }
+                loadPomodoroTasks();
+            } else {
+                await masterStartTimer();
+            }
+        }
+
+        // ==========================================
+        // 🐹 타이머 창 캐릭터 (이 브라우저의 localStorage에만 저장 - 기기 간 연동 없음)
+        // ==========================================
+        // walk/hurry는 2프레임을 번갈아 보여줘서 걷는 모션을 내고, sleep/wake는 정지 포즈 1장이다.
+        // rest는 이미지를 최대 2개 등록할 수 있고 등록된 것 중 하나를 랜덤으로 보여준다.
+        // rest는 ① 걷는 중 캐릭터마다 랜덤 타이밍에 잠깐 끼워지는 휴식, ② Pause를 눌렀을 때 전체 캐릭터의 공통 상태로 들어간다.
+        const SHIMEJI_DEFAULT_EMOJI = { walk: '🐹', hurry: '💨', rest: '🧘', sleep: '😴', wake: '⏰' };
+        const SHIMEJI_FRAME_INTERVAL = { walk: 260, hurry: 90 };
+        const SHIMEJI_MAX_CHARACTERS = 3;
+        const SHIMEJI_GIF_MAX_BYTES = 1024 * 1024; // GIF는 원본 그대로 저장되어 브라우저 저장 공간을 많이 쓰므로 작게 제한
+        const SHIMEJI_SLOT_SUFFIXES = ['_walk_1', '_walk_2', '_hurry_1', '_hurry_2', '_rest_1', '_rest_2', '_sleep', '_wake'];
+        const SHIMEJI_SIZES = { S: 40, M: 84, L: 128 };
+        const SHIMEJI_CARDS = [
+            { title: '걷기 (2프레임)', slots: [{ suffix: 'walk_1', label: '프레임1' }, { suffix: 'walk_2', label: '프레임2' }] },
+            { title: '휴식 (등록된 것 중 랜덤)', slots: [{ suffix: 'rest_1', label: '옵션1' }, { suffix: 'rest_2', label: '옵션2' }] },
+            { title: '서두르기 (2프레임)', slots: [{ suffix: 'hurry_1', label: '프레임1' }, { suffix: 'hurry_2', label: '프레임2' }] },
+            { title: '수면 · 기상', slots: [{ suffix: 'sleep', label: '수면' }, { suffix: 'wake', label: '기상' }] },
+        ];
+
+        // 샘플 화면(?demo=1)에서 등록된 캐릭터가 없을 때만 보여주는 기본 샘플 캐릭터. 파일 경로는 상대경로여야 GitHub Pages 하위 주소에서도 동작한다.
+        const SHIMEJI_SAMPLE_ID = 'sample';
+        const SHIMEJI_SAMPLE_IMAGES = {
+            walk_1: 'character/small/character_walk1.png', walk_2: 'character/small/character_walk2.png',
+            hurry_1: 'character/small/character_rush1.png', hurry_2: 'character/small/character_rush2.png',
+            rest_1: 'character/small/character_rest1.png', rest_2: 'character/small/character_rest2.png',
+            sleep: 'character/small/character_sleep1.png', wake: 'character/small/character_wake1.png',
+        };
+
+        let shimejiState = 'walk';
+        let shimejiPausedByUser = false;
+        let shimejiCharacterIds = [];
+        let shimejiRuntime = [];
+        let shimejiLoopId = null;
+
+        // 임베드/사생활 보호 모드에서는 저장소 접근이 막힐 수 있어서 모두 예외를 삼키는 래퍼로 접근한다.
+        function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+        function lsSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (e) { return false; } }
+        function lsRemove(key) { try { localStorage.removeItem(key); } catch (e) {} }
+
+        // 무대에 올릴 캐릭터 id 목록. 샘플 화면이고 등록된 캐릭터가 하나도 없으면 샘플 캐릭터 1개를 보여준다.
+        function shimejiStageIds() { return (isDemo && shimejiCharacterIds.length === 0) ? [SHIMEJI_SAMPLE_ID] : shimejiCharacterIds; }
+        // slot 예: 'walk_1', 'rest_2', 'sleep'
+        // 직접 올린 이미지가 없는 칸은 기본 샘플 캐릭터(양) 이미지로 대신 보여준다.
+        function getShimejiImage(id, slot) {
+            if (id === SHIMEJI_SAMPLE_ID) return SHIMEJI_SAMPLE_IMAGES[slot] || null;
+            return lsGet(`shimejiImg_${id}_${slot}`) || SHIMEJI_SAMPLE_IMAGES[slot] || null;
+        }
+
+        // 샘플 화면은 샘플 캐릭터가 잘 보이도록 기본 크기를 M으로 둔다.
+        function getShimejiSize() { const s = lsGet('shimejiSize'); return SHIMEJI_SIZES[s] ? s : (isDemo ? 'M' : 'S'); }
+        function setShimejiSize(size) {
+            if (!SHIMEJI_SIZES[size]) return;
+            lsSet('shimejiSize', size);
+            applyShimejiSize();
+            renderShimejiSizeButtons();
+        }
+        function applyShimejiSize() {
+            const px = SHIMEJI_SIZES[getShimejiSize()];
+            shimejiRuntime.forEach(r => {
+                const sprite = document.getElementById('shimejiSprite-' + r.id);
+                if (sprite) { sprite.style.width = px + 'px'; sprite.style.height = px + 'px'; }
+                const emojiEl = document.getElementById('shimejiEmoji-' + r.id);
+                if (emojiEl) emojiEl.style.fontSize = Math.round(px * 0.65) + 'px';
+            });
+        }
+        function renderShimejiSizeButtons() {
+            const size = getShimejiSize();
+            document.querySelectorAll('.shimeji-size-btn').forEach(b => b.classList.toggle('active', b.dataset.size === size));
+        }
+
+        // 처음에는 캐릭터가 없는 상태로 시작한다. "+ 캐릭터 추가"를 눌러야 생긴다.
+        function loadShimejiCharacterIds() {
+            try {
+                const stored = JSON.parse(lsGet('shimejiCharacterIds') || 'null');
+                if (Array.isArray(stored)) return stored.slice(0, SHIMEJI_MAX_CHARACTERS);
+            } catch (e) {}
+            return [];
+        }
+        function saveShimejiCharacterIds() {
+            if (!lsSet('shimejiCharacterIds', JSON.stringify(shimejiCharacterIds))) {
+                alert('이 환경에서는 브라우저 저장이 막혀 있어 캐릭터를 저장할 수 없어요.');
+            }
+        }
+        function getShimejiCharacterName(id, fallbackIndex) { return lsGet('shimejiCharName_' + id) || `캐릭터 ${fallbackIndex}`; }
+
+        function parseShimejiSlotKey(fullKey) {
+            for (const suffix of SHIMEJI_SLOT_SUFFIXES) {
+                if (fullKey.endsWith(suffix)) {
+                    return { charId: fullKey.slice(0, -suffix.length), group: suffix.replace(/^_/, '').replace(/_[12]$/, '') };
+                }
+            }
+            return { charId: fullKey, group: null };
+        }
+
+        function initShimeji() {
+            const maxLabel = document.getElementById('shimejiMaxLabel');
+            if (maxLabel) maxLabel.innerText = SHIMEJI_MAX_CHARACTERS;
+            shimejiCharacterIds = loadShimejiCharacterIds();
+            rebuildShimejiStage();
+            renderShimejiCharList();
+            renderShimejiSizeButtons();
+            if (!shimejiLoopId) shimejiLoopId = setInterval(shimejiTick, 50);
+        }
+
+        function openShimejiSettings() {
+            renderShimejiCharList();
+            renderShimejiSizeButtons();
+            document.getElementById('shimeji-settings-modal').style.display = 'flex';
+        }
+        function closeShimejiSettings() { document.getElementById('shimeji-settings-modal').style.display = 'none'; }
+
+        function addShimejiCharacter() {
+            if (shimejiCharacterIds.length >= SHIMEJI_MAX_CHARACTERS) { alert(`캐릭터는 최대 ${SHIMEJI_MAX_CHARACTERS}개까지 추가할 수 있어요.`); return; }
+            shimejiCharacterIds.push('c' + Date.now());
+            saveShimejiCharacterIds();
+            rebuildShimejiStage();
+            renderShimejiCharList();
+        }
+
+        function removeShimejiCharacter(id) {
+            shimejiCharacterIds = shimejiCharacterIds.filter(x => x !== id);
+            saveShimejiCharacterIds();
+            SHIMEJI_SLOT_SUFFIXES.forEach(suffix => lsRemove(`shimejiImg_${id}${suffix}`));
+            lsRemove('shimejiCharName_' + id);
+            rebuildShimejiStage();
+            renderShimejiCharList();
+        }
+
+        function renameShimejiCharacter(id, name) {
+            const trimmed = (name || '').trim();
+            if (trimmed) lsSet('shimejiCharName_' + id, trimmed);
+            else lsRemove('shimejiCharName_' + id);
+        }
+
+        function rebuildShimejiStage() {
+            const stage = document.getElementById('shimejiStage');
+            if (!stage) return;
+            stage.innerHTML = '';
+            const px = SHIMEJI_SIZES[getShimejiSize()];
+            shimejiRuntime = shimejiStageIds().map(id => {
+                const sprite = document.createElement('div');
+                sprite.id = 'shimejiSprite-' + id;
+                sprite.style.cssText = `position:absolute; bottom:0; width:${px}px; height:${px}px; display:flex; align-items:center; justify-content:center;`;
+                sprite.innerHTML = `<img id="shimejiImg-${id}" src="" alt="" style="display:none; width:100%; height:100%; object-fit:contain;"><span id="shimejiEmoji-${id}" style="font-size:${Math.round(px * 0.65)}px; line-height:1;">🐹</span>`;
+                stage.appendChild(sprite);
+                return {
+                    id, x: 10 + Math.random() * 60, targetX: null, dir: 1, frame: 1,
+                    lastFrameSwitch: 0, pauseUntil: 0, resting: false, restUntil: 0, restFrame: 1,
+                    speedMult: 0.85 + Math.random() * 0.3,
+                };
+            });
+            shimejiRuntime.forEach(r => setShimejiCharacterVisual(r));
+        }
+
+        function renderShimejiCharList() {
+            const list = document.getElementById('shimeji-char-list');
+            if (!list) return;
+            const addBtn = document.getElementById('shimejiAddCharBtn');
+            if (shimejiCharacterIds.length === 0) {
+                list.innerHTML = `<div style="text-align:center; padding:20px 10px; color:var(--text-sub); font-size:12px; border:1px dashed var(--border-color); border-radius:12px;">아직 캐릭터가 없어요.<br>아래 "+ 캐릭터 추가"를 누르면 시작돼요.</div>`;
+                if (addBtn) addBtn.style.display = 'block';
+                return;
+            }
+            list.innerHTML = shimejiCharacterIds.map((id, idx) => {
+                const name = getShimejiCharacterName(id, idx + 1);
+                const cardsHtml = SHIMEJI_CARDS.map(card => {
+                    const slotsHtml = card.slots.map(slot => {
+                        const fullKey = `${id}_${slot.suffix}`;
+                        return `
+                            <div style="text-align:center;">
+                                <div id="shimejiThumb-${fullKey}" style="width:40px; height:40px; margin:0 auto 4px auto; border-radius:9px; background:var(--main-bg); border:1px solid var(--border-color); display:flex; align-items:center; justify-content:center; font-size:20px; overflow:hidden;"></div>
+                                <div style="font-size:9px; color:var(--text-sub); margin-bottom:2px;">${slot.label}</div>
+                                <button class="btn-secondary" style="padding:3px; font-size:9px; width:100%; margin:0 0 2px 0;" onclick="document.getElementById('shimejiInput-${fullKey}').click()">업로드</button>
+                                <button class="btn-secondary" style="padding:3px; font-size:9px; width:100%; margin:0;" onclick="removeShimejiImage('${fullKey}')">삭제</button>
+                                <input type="file" id="shimejiInput-${fullKey}" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;" onchange="handleShimejiUpload(event, '${fullKey}')">
+                            </div>
+                        `;
+                    }).join('');
+                    return `
+                        <div style="padding:8px; border:1px solid var(--border-color); border-radius:10px;">
+                            <div style="font-size:11px; font-weight:700; color:var(--text-main); text-align:center; margin-bottom:6px;">${card.title}</div>
+                            <div style="display:flex; gap:6px; justify-content:center;">${slotsHtml}</div>
+                        </div>
+                    `;
+                }).join('');
+                return `
+                    <div style="border:1px solid var(--border-color); border-radius:12px; padding:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                            <input type="text" value="${escapeHtml(name)}" placeholder="캐릭터 ${idx + 1}" style="font-size:13px; font-weight:700; border:1px solid transparent; background:transparent; color:var(--text-main); flex:1; min-width:0; padding:4px 6px; border-radius:6px;" onchange="renameShimejiCharacter('${id}', this.value)">
+                            <button class="btn-secondary" style="padding:4px 8px; font-size:10px; width:auto; margin:0; flex-shrink:0;" onclick="removeShimejiCharacter('${id}')">삭제</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px;">${cardsHtml}</div>
+                    </div>
+                `;
+            }).join('');
+
+            shimejiCharacterIds.forEach(id => {
+                SHIMEJI_CARDS.forEach(card => card.slots.forEach(slot => renderShimejiThumb(`${id}_${slot.suffix}`)));
+            });
+            if (addBtn) addBtn.style.display = shimejiCharacterIds.length >= SHIMEJI_MAX_CHARACTERS ? 'none' : 'block';
+        }
+
+        // 타이머 상태(집중/휴식, 남은 시간, 실행·일시정지 여부)로 캐릭터 상태를 계산한다.
+        function updateShimejiState() {
+            let next;
+            if (shimejiPausedByUser) {
+                next = 'rest';
+            } else if (isFocusMode) {
+                next = (isPomoRunning && pomoTimeLeft < 60) ? 'hurry' : 'walk';
+            } else {
+                next = (isPomoRunning && pomoTimeLeft < 60) ? 'wake' : 'sleep';
+            }
+            if (next !== shimejiState) setShimejiState(next);
+        }
+
+        function setShimejiState(state) {
+            shimejiState = state;
+            shimejiRuntime.forEach(r => {
+                r.frame = 1;
+                r.lastFrameSwitch = 0;
+                r.resting = false;
+                r.restUntil = 0;
+                if (state === 'rest') r.restFrame = Math.random() < 0.5 ? 1 : 2;
+                setShimejiCharacterVisual(r);
+                updateShimejiCharacterClass(r);
+            });
+        }
+
+        function isShimejiResting(r) { return shimejiState === 'rest' || (shimejiState === 'walk' && r.resting); }
+
+        function updateShimejiCharacterClass(r) {
+            const sprite = document.getElementById('shimejiSprite-' + r.id);
+            if (!sprite) return;
+            sprite.className = isShimejiResting(r) ? 'shimeji-rest' : 'shimeji-' + shimejiState;
+        }
+
+        function resolveShimejiRestSlot(r) {
+            const primary = `rest_${r.restFrame}`;
+            const fallback = `rest_${r.restFrame === 1 ? 2 : 1}`;
+            if (getShimejiImage(r.id, primary)) return primary;
+            if (getShimejiImage(r.id, fallback)) return fallback;
+            return null;
+        }
+
+        // 캐릭터의 현재 상태에 맞는 이미지를 보여준다. 이미지가 없으면 기본 이모지.
+        function setShimejiCharacterVisual(r) {
+            const imgEl = document.getElementById('shimejiImg-' + r.id);
+            const emojiEl = document.getElementById('shimejiEmoji-' + r.id);
+            if (!imgEl || !emojiEl) return;
+            let dataUrl = null, emojiKey;
+            if (isShimejiResting(r)) {
+                emojiKey = 'rest';
+                const slotSuffix = resolveShimejiRestSlot(r);
+                if (slotSuffix) dataUrl = getShimejiImage(r.id, slotSuffix);
+            } else if (shimejiState === 'walk' || shimejiState === 'hurry') {
+                emojiKey = shimejiState;
+                dataUrl = getShimejiImage(r.id, `${shimejiState}_${r.frame}`);
+            } else {
+                emojiKey = shimejiState;
+                dataUrl = getShimejiImage(r.id, shimejiState);
+            }
+            if (dataUrl) { imgEl.src = dataUrl; imgEl.style.display = 'block'; emojiEl.style.display = 'none'; }
+            else { imgEl.style.display = 'none'; imgEl.src = ''; emojiEl.style.display = 'block'; emojiEl.innerText = SHIMEJI_DEFAULT_EMOJI[emojiKey]; }
+        }
+
+        function shimejiTick() {
+            const stage = document.getElementById('shimejiStage');
+            if (!stage || shimejiRuntime.length === 0) return;
+            const stageWidth = stage.clientWidth;
+            const now = Date.now();
+
+            shimejiRuntime.forEach(r => {
+                const sprite = document.getElementById('shimejiSprite-' + r.id);
+                if (!sprite) return;
+                const maxX = Math.max(0, stageWidth - sprite.offsetWidth);
+
+                if (shimejiState === 'sleep' || shimejiState === 'rest') {
+                    sprite.style.left = Math.min(r.x, maxX) + 'px';
+                    return;
+                }
+
+                if (shimejiState === 'walk' && r.resting) {
+                    if (now < r.restUntil) { sprite.style.left = Math.min(r.x, maxX) + 'px'; return; }
+                    r.resting = false;
+                    updateShimejiCharacterClass(r);
+                }
+
+                if ((shimejiState === 'walk' || shimejiState === 'hurry') && now - r.lastFrameSwitch >= SHIMEJI_FRAME_INTERVAL[shimejiState]) {
+                    r.frame = r.frame === 1 ? 2 : 1;
+                    r.lastFrameSwitch = now;
+                    setShimejiCharacterVisual(r);
+                }
+
+                if (now < r.pauseUntil) return;
+
+                if (r.targetX === null || Math.abs(r.x - r.targetX) < 2) {
+                    if (shimejiState === 'walk' && Math.random() < 0.3) {
+                        r.resting = true;
+                        r.restFrame = Math.random() < 0.5 ? 1 : 2;
+                        r.restUntil = now + 900 + Math.random() * 1600;
+                        r.pauseUntil = r.restUntil;
+                        setShimejiCharacterVisual(r);
+                        updateShimejiCharacterClass(r);
+                        return;
+                    }
+                    r.targetX = Math.random() * maxX;
+                    if (shimejiState === 'walk' && Math.random() < 0.25) { r.pauseUntil = now + 400 + Math.random() * 800; }
+                    return;
+                }
+                r.dir = r.targetX > r.x ? 1 : -1;
+                const stepBase = shimejiState === 'hurry' ? 4 : (shimejiState === 'wake' ? 0.6 : 1.4);
+                const step = stepBase * r.speedMult;
+                r.x = Math.max(0, Math.min(maxX, r.x + r.dir * step));
+                sprite.style.left = r.x + 'px';
+                // 캐릭터 이미지는 보통 왼쪽을 기본 방향으로 그려서, 오른쪽으로 이동할 때 뒤집어준다.
+                sprite.style.transform = `scaleX(${r.dir >= 0 ? -1 : 1})`;
+            });
+        }
+
+        function handleShimejiUpload(event, slotKey) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { alert('이미지 파일만 업로드할 수 있어요.'); event.target.value = ''; return; }
+            if (file.size > 8 * 1024 * 1024) { alert('이미지 용량은 8MB 이하로 올려주세요.'); event.target.value = ''; return; }
+            if (file.type === 'image/gif' && file.size > SHIMEJI_GIF_MAX_BYTES) { alert('GIF는 1MB 이하만 올릴 수 있어요. 더 작은 GIF나 PNG를 사용해주세요.'); event.target.value = ''; return; }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // GIF는 캔버스에 그리면 애니메이션이 사라지므로 원본 그대로 저장
+                if (file.type === 'image/gif') { saveShimejiImage(slotKey, e.target.result); return; }
+                const img = new Image();
+                img.onload = () => {
+                    const maxSize = 160;
+                    let { width, height } = img;
+                    if (width > maxSize || height > maxSize) {
+                        if (width > height) { height = Math.round(height * maxSize / width); width = maxSize; }
+                        else { width = Math.round(width * maxSize / height); height = maxSize; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    saveShimejiImage(slotKey, canvas.toDataURL('image/png'));
+                };
+                img.onerror = () => alert('이미지를 불러올 수 없어요. 다른 파일을 시도해주세요.');
+                img.src = e.target.result;
+            };
+            reader.onerror = () => alert('이미지를 읽는 중 오류가 발생했어요.');
+            reader.readAsDataURL(file);
+        }
+
+        function saveShimejiImage(slotKey, dataUrl) {
+            if (!lsSet('shimejiImg_' + slotKey, dataUrl)) {
+                alert('이미지 저장에 실패했어요. 브라우저 저장 공간이 부족하거나 이 환경에서 저장이 막혀 있을 수 있어요. 더 작은 이미지를 사용해주세요.');
+                return;
+            }
+            renderShimejiThumb(slotKey);
+            const { charId } = parseShimejiSlotKey(slotKey);
+            const r = shimejiRuntime.find(x => x.id === charId);
+            if (r) setShimejiCharacterVisual(r);
+        }
+
+        function removeShimejiImage(slotKey) {
+            lsRemove('shimejiImg_' + slotKey);
+            const input = document.getElementById('shimejiInput-' + slotKey); if (input) input.value = '';
+            renderShimejiThumb(slotKey);
+            const { charId } = parseShimejiSlotKey(slotKey);
+            const r = shimejiRuntime.find(x => x.id === charId);
+            if (r) setShimejiCharacterVisual(r);
+        }
+
+        function renderShimejiThumb(slotKey) {
+            const thumb = document.getElementById('shimejiThumb-' + slotKey);
+            if (!thumb) return;
+            const dataUrl = lsGet('shimejiImg_' + slotKey);
+            const { group } = parseShimejiSlotKey(slotKey);
+            if (dataUrl) { thumb.innerHTML = `<img src="${dataUrl}" style="width:100%; height:100%; object-fit:contain;">`; return; }
+            // 올린 이미지가 없으면 기본 샘플(양) 이미지를 흐리게 보여준다.
+            const slot = slotKey.slice(parseShimejiSlotKey(slotKey).charId.length + 1);
+            const sample = SHIMEJI_SAMPLE_IMAGES[slot];
+            if (sample) { thumb.innerHTML = `<img src="${sample}" title="기본 이미지" style="width:100%; height:100%; object-fit:contain; opacity:0.45;">`; }
+            else { thumb.innerText = SHIMEJI_DEFAULT_EMOJI[group] || '❓'; }
+        }
+    </script>
+</body>
+</html>
